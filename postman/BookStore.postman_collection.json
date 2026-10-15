@@ -1,0 +1,1825 @@
+{
+  "info": {
+    "_postman_id": "8947e948-1eaa-5f56-9c92-3e4fd3797b82",
+    "name": "DemoQA Book Store API",
+    "description": "Implements docs/TEST_PLAN.md. Run folders in order (Setup \u2192 Teardown). Set `assertKnownDefects` to `true` to turn on checks for logged defects R6/R7.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level checks applied to every request",
+          "pm.test(\"response time < \" + pm.collectionVariables.get(\"maxResponseMs\") + \" ms\",",
+          "  () => pm.expect(pm.response.responseTime).to.be.below(Number(pm.collectionVariables.get(\"maxResponseMs\"))));",
+          "if (pm.response.code !== 204 && !pm.info.requestName.startsWith(\"E25\")) {",
+          "  pm.test(\"Content-Type is JSON\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Setup",
+      "description": "Creates two throwaway users (A = actor, B = victim for IDOR checks).",
+      "item": [
+        {
+          "name": "ACC-01 Register user A",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"userNameA\", `qa_pm_a_${Date.now()}_${_.random(1000,9999)}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"schema: user created\", () => pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaUser\"))));",
+                  "pm.test(\"username echoed and books empty\", () => {",
+                  "  pm.expect(b.username).to.eql(pm.collectionVariables.get(\"userNameA\"));",
+                  "  pm.expect(b.books).to.be.an(\"array\").that.is.empty;",
+                  "});",
+                  "pm.collectionVariables.set(\"userIdA\", b.userID);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-05 Generate token A",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/GenerateToken",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "GenerateToken"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"token issued\", () => {",
+                  "  pm.expect(b.status).to.eql(\"Success\");",
+                  "  pm.expect(b.token).to.match(/^[\\w-]+\\.[\\w-]+\\.[\\w-]+$/);",
+                  "  pm.expect(new Date(b.expires).getTime()).to.be.above(Date.now());",
+                  "});",
+                  "pm.collectionVariables.set(\"tokenA\", b.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register user B",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameB}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"userNameB\", `qa_pm_b_${Date.now()}_${_.random(1000,9999)}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"userIdB\", pm.response.json().userID);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Generate token B",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/GenerateToken",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "GenerateToken"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameB}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"token issued\", () => pm.expect(pm.response.json().status).to.eql(\"Success\"));",
+                  "pm.collectionVariables.set(\"tokenB\", pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Account",
+      "description": "Account endpoints: positive and negative cases.",
+      "item": [
+        {
+          "name": "ACC-02 Register duplicate username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 406\", () => pm.response.to.have.status(406));",
+                  "pm.test(\"error code is 1204\", () => pm.expect(pm.response.json().code).to.eql(\"1204\"));",
+                  "pm.test(\"error message\", () => pm.expect(pm.response.json().message).to.include(\"User exists!\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-03 Register with weak passwords (table-driven)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"qa_pm_weak_{{$timestamp}}\",\n  \"password\": \"short1!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error code is 1300\", () => pm.expect(pm.response.json().code).to.eql(\"1300\"));",
+                  "",
+                  "// Remaining policy rules, each must be rejected with 1300",
+                  "const cases = {",
+                  "  \"no uppercase\": \"passw0rd!123\",",
+                  "  \"no lowercase\": \"PASSW0RD!123\",",
+                  "  \"no digit\": \"Password!abc\",",
+                  "  \"no special\": \"Passw0rd1234\",",
+                  "  \"too short\": \"Pa0!a\"",
+                  "};",
+                  "Object.entries(cases).forEach(([rule, pwd]) => {",
+                  "  pm.sendRequest({",
+                  "    url: pm.variables.replaceIn(\"{{baseUrl}}/Account/v1/User\"), method: \"POST\",",
+                  "    header: { \"Content-Type\": \"application/json\" },",
+                  "    body: { mode: \"raw\", raw: JSON.stringify({ userName: `qa_pm_weak_${Date.now()}_${_.random(1,99999)}`, password: pwd }) }",
+                  "  }, (e, res) => pm.test(`policy rejects password with ${rule}`, () => {",
+                  "    pm.expect(e).to.be.null;",
+                  "    pm.expect(res.code).to.eql(400);",
+                  "    pm.expect(res.json().code).to.eql(\"1300\");",
+                  "  }));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-04 Register with empty fields",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"\",\n  \"password\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error code is 1200\", () => pm.expect(pm.response.json().code).to.eql(\"1200\"));",
+                  "pm.test(\"error message\", () => pm.expect(pm.response.json().message).to.include(\"UserName and Password required.\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-06 Generate token with wrong password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/GenerateToken",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "GenerateToken"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameA}}\",\n  \"password\": \"Wrong!Pass1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// NOTE: API returns 200 on failed auth (see plan R5), so assert on the body",
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"auth failed, no token\", () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.status).to.eql(\"Failed\");",
+                  "  pm.expect(b.token).to.be.null;",
+                  "  pm.expect(b.result).to.eql(\"User authorization failed.\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-07a Authorized with valid credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/Authorized",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "Authorized"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"returns true\", () => pm.expect(pm.response.json()).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-07b Authorized with unknown user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/Authorized",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "Authorized"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"qa_pm_ghost_{{$timestamp}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error code is 1207\", () => pm.expect(pm.response.json().code).to.eql(\"1207\"));",
+                  "pm.test(\"error message\", () => pm.expect(pm.response.json().message).to.include(\"User not found!\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-08 Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/Login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "Login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"same userId as registration\", () => pm.expect(b.userId).to.eql(pm.collectionVariables.get(\"userIdA\")));",
+                  "pm.test(\"token returned\", () => pm.expect(b.token).to.be.a(\"string\").and.not.empty);",
+                  "// Known defect R6: response echoes the plaintext password",
+                  "(pm.collectionVariables.get(\"assertKnownDefects\") === \"true\" ? pm.test : pm.test.skip)(",
+                  "  \"[R6] password is not echoed in response\", () => pm.expect(b).to.not.have.property(\"password\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-09a Get user with valid token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User/{{userIdA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User",
+                "{{userIdA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"schema: user\", () => pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaUserWithBooks\"))));",
+                  "pm.test(\"is user A\", () => pm.expect(pm.response.json().userId).to.eql(pm.collectionVariables.get(\"userIdA\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-09b Get user without token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User/{{userIdA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User",
+                "{{userIdA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"error code is 1200\", () => pm.expect(pm.response.json().code).to.eql(\"1200\"));",
+                  "pm.test(\"error message\", () => pm.expect(pm.response.json().message).to.include(\"User not authorized!\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ACC-09c Get user with tampered token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tamperedToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User/{{userIdA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User",
+                "{{userIdA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.collectionVariables.get(\"tokenA\");",
+                  "pm.collectionVariables.set(\"tamperedToken\", t.slice(0, -2) + (t.endsWith(\"xx\") ? \"yy\" : \"xx\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"error code is 1200\", () => pm.expect(pm.response.json().code).to.eql(\"1200\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E25 Malformed JSON body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{bad json",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "// Known defect R7: returns an HTML stack trace with server paths",
+                  "(pm.collectionVariables.get(\"assertKnownDefects\") === \"true\" ? pm.test : pm.test.skip)(",
+                  "  \"[R7] error is JSON and leaks no stack trace\", () => {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+                  "    pm.expect(pm.response.text()).to.not.match(/at JSON\\.parse|\\/usr\\//);",
+                  "  });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 BookStore",
+      "description": "Catalogue and collection endpoints.",
+      "item": [
+        {
+          "name": "BS-01 List books",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"schema: book list\", () => pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaBookList\"))));",
+                  "const books = pm.response.json().books;",
+                  "pm.test(\"catalogue not empty\", () => pm.expect(books.length).to.be.above(0));",
+                  "const isbns = books.map(b => b.isbn);",
+                  "pm.test(\"ISBNs are unique\", () => pm.expect(new Set(isbns).size).to.eql(isbns.length));",
+                  "// pick a primary and a secondary book for later requests",
+                  "const git = books.find(b => /git/i.test(b.title));",
+                  "pm.test(\"search by title finds 'Git Pocket Guide'\", () => pm.expect(git, \"no book matching /git/i\").to.exist);",
+                  "pm.collectionVariables.set(\"isbn\", git.isbn);",
+                  "pm.collectionVariables.set(\"isbn2\", books.find(b => b.isbn !== git.isbn).isbn);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-02a Get book by ISBN",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Book?ISBN={{isbn}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Book"
+              ],
+              "query": [
+                {
+                  "key": "ISBN",
+                  "value": "{{isbn}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"correct book\", () => pm.expect(pm.response.json().isbn).to.eql(pm.collectionVariables.get(\"isbn\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-02b Get book by unknown ISBN",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Book?ISBN=0000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Book"
+              ],
+              "query": [
+                {
+                  "key": "ISBN",
+                  "value": "0000000000"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error code is 1205\", () => pm.expect(pm.response.json().code).to.eql(\"1205\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-03 Add book to collection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userIdA}}\",\n  \"collectionOfIsbns\": [{ \"isbn\": \"{{isbn}}\" }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"book returned\", () => pm.expect(pm.response.json().books).to.eql([{ isbn: pm.collectionVariables.get(\"isbn\") }]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-04 Add duplicate book",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userIdA}}\",\n  \"collectionOfIsbns\": [{ \"isbn\": \"{{isbn}}\" }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error code is 1210\", () => pm.expect(pm.response.json().code).to.eql(\"1210\"));",
+                  "pm.test(\"error message\", () => pm.expect(pm.response.json().message).to.include(\"ISBN already present\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-05 Add unknown ISBN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userIdA}}\",\n  \"collectionOfIsbns\": [{ \"isbn\": \"0000000000\" }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error code is 1205\", () => pm.expect(pm.response.json().code).to.eql(\"1205\"));",
+                  "pm.test(\"error message\", () => pm.expect(pm.response.json().message).to.include(\"not available in Books Collection\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-06 Add book without token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userIdA}}\",\n  \"collectionOfIsbns\": [{ \"isbn\": \"{{isbn2}}\" }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"error code is 1200\", () => pm.expect(pm.response.json().code).to.eql(\"1200\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-07 Add book to another user's collection (IDOR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userIdB}}\",\n  \"collectionOfIsbns\": [{ \"isbn\": \"{{isbn}}\" }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"error code is 1200\", () => pm.expect(pm.response.json().code).to.eql(\"1200\"));",
+                  "pm.sendRequest({ url: pm.variables.replaceIn(\"{{baseUrl}}/Account/v1/User/{{userIdB}}\"),",
+                  "  header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"tokenB\") } },",
+                  "  (e, res) => pm.test(\"user B's collection is untouched\", () => pm.expect(res.json().books).to.be.empty));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-08 Replace book in collection",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books/{{isbn}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books",
+                "{{isbn}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userIdA}}\",\n  \"isbn\": \"{{isbn2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const isbns = pm.response.json().books.map(b => b.isbn);",
+                  "pm.test(\"old ISBN replaced by new\", () => {",
+                  "  pm.expect(isbns).to.include(pm.collectionVariables.get(\"isbn2\"));",
+                  "  pm.expect(isbns).to.not.include(pm.collectionVariables.get(\"isbn\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-09a Delete book from collection",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Book",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Book"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isbn\": \"{{isbn2}}\",\n  \"userId\": \"{{userIdA}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-09b Delete same book again",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Book",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Book"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isbn\": \"{{isbn2}}\",\n  \"userId\": \"{{userIdA}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error code is 1206\", () => pm.expect(pm.response.json().code).to.eql(\"1206\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-11 Add several books at once",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userIdA}}\",\n  \"collectionOfIsbns\": [{ \"isbn\": \"{{isbn}}\" }, { \"isbn\": \"{{isbn2}}\" }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"both books added\", () => pm.expect(pm.response.json().books).to.have.lengthOf(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BS-10 Delete all books",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books?UserId={{userIdA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ],
+              "query": [
+                {
+                  "key": "UserId",
+                  "value": "{{userIdA}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 204\", () => pm.response.to.have.status(204));",
+                  "pm.sendRequest({ url: pm.variables.replaceIn(\"{{baseUrl}}/Account/v1/User/{{userIdA}}\"),",
+                  "  header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"tokenA\") } },",
+                  "  (e, res) => pm.test(\"collection is empty\", () => pm.expect(res.json().books).to.be.empty));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 E2E Flow",
+      "description": "Task B flow over the API: register, login, search, add, list, delete, logout.",
+      "item": [
+        {
+          "name": "1. Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameC}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"userNameC\", `qa_pm_e2e_${Date.now()}_${_.random(1000,9999)}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"registered\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"userIdC\", pm.response.json().userID);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1. Login (generate token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/GenerateToken",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "GenerateToken"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameC}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"logged in\", () => pm.expect(pm.response.json().status).to.eql(\"Success\"));",
+                  "pm.collectionVariables.set(\"tokenC\", pm.response.json().token);",
+                  "pm.collectionVariables.set(\"cleanupTokenC\", pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Search books by title",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hits = pm.response.json().books.filter(b => b.title.toLowerCase().includes(pm.collectionVariables.get(\"searchTerm\").toLowerCase()));",
+                  "pm.test(\"search returns a match\", () => pm.expect(hits.length).to.be.above(0));",
+                  "pm.collectionVariables.set(\"e2eIsbn\", hits[0].isbn);",
+                  "pm.collectionVariables.set(\"e2eTitle\", hits[0].title);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Add book to collection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenC}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userIdC}}\",\n  \"collectionOfIsbns\": [{ \"isbn\": \"{{e2eIsbn}}\" }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"added\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. View collection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenC}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User/{{userIdC}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User",
+                "{{userIdC}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"collection contains the book\", () => {",
+                  "  const books = pm.response.json().books;",
+                  "  pm.expect(books).to.have.lengthOf(1);",
+                  "  pm.expect(books[0].title).to.eql(pm.collectionVariables.get(\"e2eTitle\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Delete book from collection",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenC}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/BookStore/v1/Book",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "BookStore",
+                "v1",
+                "Book"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isbn\": \"{{e2eIsbn}}\",\n  \"userId\": \"{{userIdC}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"deleted\", () => pm.response.to.have.status(204));",
+                  "pm.sendRequest({ url: pm.variables.replaceIn(\"{{baseUrl}}/Account/v1/User/{{userIdC}}\"),",
+                  "  header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"tokenC\") } },",
+                  "  (e, res) => pm.test(\"collection is empty\", () => pm.expect(res.json().books).to.be.empty));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Logout (discard token) then access is denied",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenC}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User/{{userIdC}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User",
+                "{{userIdC}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The API has no logout endpoint (plan R4): logging out = discarding the token client-side",
+                  "pm.collectionVariables.set(\"tokenC\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"error code is 1200\", () => pm.expect(pm.response.json().code).to.eql(\"1200\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "99 Teardown",
+      "description": "Deletes every user the run created.",
+      "item": [
+        {
+          "name": "Delete user A",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User/{{userIdA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User",
+                "{{userIdA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 204\", () => pm.response.to.have.status(204));",
+                  "pm.sendRequest({ url: pm.variables.replaceIn(\"{{baseUrl}}/Account/v1/User/{{userIdA}}\"),",
+                  "  header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"tokenA\") } },",
+                  "  (e, res) => pm.test(\"ACC-10 user is gone\", () => {",
+                  "    pm.expect(res.code).to.eql(401);",
+                  "    pm.expect(res.json().code).to.eql(\"1207\");",
+                  "  }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete user B",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User/{{userIdB}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User",
+                "{{userIdB}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 204\", () => pm.response.to.have.status(204));",
+                  "pm.sendRequest({ url: pm.variables.replaceIn(\"{{baseUrl}}/Account/v1/User/{{userIdB}}\"),",
+                  "  header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"tokenB\") } },",
+                  "  (e, res) => pm.test(\"ACC-10 user is gone\", () => {",
+                  "    pm.expect(res.code).to.eql(401);",
+                  "    pm.expect(res.json().code).to.eql(\"1207\");",
+                  "  }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete user C",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cleanupTokenC}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/User/{{userIdC}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "User",
+                "{{userIdC}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 204\", () => pm.response.to.have.status(204));",
+                  "pm.sendRequest({ url: pm.variables.replaceIn(\"{{baseUrl}}/Account/v1/User/{{userIdC}}\"),",
+                  "  header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"cleanupTokenC\") } },",
+                  "  (e, res) => pm.test(\"ACC-10 user is gone\", () => {",
+                  "    pm.expect(res.code).to.eql(401);",
+                  "    pm.expect(res.json().code).to.eql(\"1207\");",
+                  "  }));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "password",
+      "value": "Passw0rd!123"
+    },
+    {
+      "key": "searchTerm",
+      "value": "Git"
+    },
+    {
+      "key": "maxResponseMs",
+      "value": "3000"
+    },
+    {
+      "key": "assertKnownDefects",
+      "value": "false"
+    },
+    {
+      "key": "schemaUser",
+      "value": "{\"type\": \"object\", \"required\": [\"userID\", \"username\", \"books\"], \"properties\": {\"userID\": {\"type\": \"string\", \"format\": \"uuid\"}, \"username\": {\"type\": \"string\"}, \"books\": {\"type\": \"array\"}}}"
+    },
+    {
+      "key": "schemaUserWithBooks",
+      "value": "{\"type\": \"object\", \"required\": [\"userId\", \"username\", \"books\"], \"properties\": {\"userId\": {\"type\": \"string\"}, \"username\": {\"type\": \"string\"}, \"books\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"isbn\", \"title\", \"author\", \"publisher\", \"pages\"], \"properties\": {\"isbn\": {\"type\": \"string\", \"pattern\": \"^\\\\d{10,13}$\"}, \"title\": {\"type\": \"string\"}, \"author\": {\"type\": \"string\"}, \"publisher\": {\"type\": \"string\"}, \"pages\": {\"type\": \"integer\"}}}}}}"
+    },
+    {
+      "key": "schemaBookList",
+      "value": "{\"type\": \"object\", \"required\": [\"books\"], \"properties\": {\"books\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"isbn\", \"title\", \"author\", \"publisher\", \"pages\"], \"properties\": {\"isbn\": {\"type\": \"string\", \"pattern\": \"^\\\\d{10,13}$\"}, \"title\": {\"type\": \"string\"}, \"author\": {\"type\": \"string\"}, \"publisher\": {\"type\": \"string\"}, \"pages\": {\"type\": \"integer\"}}}}}}"
+    }
+  ]
+}
