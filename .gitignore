@@ -1,0 +1,10 @@
+node_modules/
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/.auth/
+api/target/
+.env
+.DS_Store
+.idea/
+.vscode/
