@@ -12,8 +12,8 @@
         "type": "text/javascript",
         "exec": [
           "// Collection-level checks applied to every request",
-          "pm.test(\"response time < \" + pm.collectionVariables.get(\"maxResponseMs\") + \" ms\",",
-          "  () => pm.expect(pm.response.responseTime).to.be.below(Number(pm.collectionVariables.get(\"maxResponseMs\"))));",
+          "pm.test(\"response time < \" + pm.variables.get(\"maxResponseMs\") + \" ms\",",
+          "  () => pm.expect(pm.response.responseTime).to.be.below(Number(pm.variables.get(\"maxResponseMs\"))));",
           "if (pm.response.code !== 204 && !pm.info.requestName.startsWith(\"E25\")) {",
           "  pm.test(\"Content-Type is JSON\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"));",
           "}"
@@ -573,7 +573,7 @@
                   "pm.test(\"same userId as registration\", () => pm.expect(b.userId).to.eql(pm.collectionVariables.get(\"userIdA\")));",
                   "pm.test(\"token returned\", () => pm.expect(b.token).to.be.a(\"string\").and.not.empty);",
                   "// Known defect R6: response echoes the plaintext password",
-                  "(pm.collectionVariables.get(\"assertKnownDefects\") === \"true\" ? pm.test : pm.test.skip)(",
+                  "(pm.variables.get(\"assertKnownDefects\") === \"true\" ? pm.test : pm.test.skip)(",
                   "  \"[R6] password is not echoed in response\", () => pm.expect(b).to.not.have.property(\"password\"));"
                 ]
               }
@@ -734,7 +734,7 @@
                 "exec": [
                   "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
                   "// Known defect R7: returns an HTML stack trace with server paths",
-                  "(pm.collectionVariables.get(\"assertKnownDefects\") === \"true\" ? pm.test : pm.test.skip)(",
+                  "(pm.variables.get(\"assertKnownDefects\") === \"true\" ? pm.test : pm.test.skip)(",
                   "  \"[R7] error is JSON and leaks no stack trace\", () => {",
                   "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
                   "    pm.expect(pm.response.text()).to.not.match(/at JSON\\.parse|\\/usr\\//);",
