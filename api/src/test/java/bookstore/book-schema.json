@@ -1,0 +1,11 @@
+{
+  "isbn": "#regex \\d{10,13}",
+  "title": "#string",
+  "subTitle": "#string",
+  "author": "#string",
+  "publish_date": "#string",
+  "publisher": "#string",
+  "pages": "#number",
+  "description": "#string",
+  "website": "#string"
+}
