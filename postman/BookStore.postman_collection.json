@@ -696,6 +696,62 @@
           ]
         },
         {
+          "name": "ACC-12 New token revokes the previous one",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/Account/v1/GenerateToken",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "Account",
+                "v1",
+                "GenerateToken"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"{{userNameA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"previousTokenA\", pm.collectionVariables.get(\"tokenA\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"new token issued\", () => pm.expect(pm.response.json().status).to.eql(\"Success\"));",
+                  "pm.collectionVariables.set(\"tokenA\", pm.response.json().token);",
+                  "pm.sendRequest({ url: pm.variables.replaceIn(\"{{baseUrl}}/Account/v1/User/{{userIdA}}\"),",
+                  "  header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"previousTokenA\") } },",
+                  "  (e, res) => pm.test(\"previous token is rejected with 401\", () => pm.expect(res.code).to.eql(401)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "E25 Malformed JSON body",
           "request": {
             "method": "POST",

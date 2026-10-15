@@ -80,6 +80,7 @@
 | E24 | Delete user | `DELETE /User/{id}` | **204** | empty; afterwards E12 |
 | E25 | Malformed JSON body | any POST | **400** | *Expected:* JSON error object. *Actual:* `text/html` page with a Node.js stack trace and server file path; see R7 |
 | E26 | Expired or tampered JWT | any auth endpoint | **401** | `code: "1200"` |
+| E27 | Old token after a new `GenerateToken` for the same user | any auth endpoint | **401** | `code: "1200"` (single active session) |
 
 ## 6. Test cases
 
@@ -98,6 +99,7 @@ Priority: **P1** = blocks release, **P2** = major, **P3** = minor.
 | ACC-08 | Login returns the same `userId` as registration | P1 | E9 |
 | ACC-09 | Get user requires a valid token | P1 | E10, E11 |
 | ACC-10 | Delete user, then get user, returns "User not found" | P1 | E24, E12 |
+| ACC-12 | Generating a new token revokes the previous one (single active session) | P2 | E27 |
 | ACC-11 | Username boundaries: very long, unicode, whitespace-only, SQL/HTML injection strings | P3 | E1, E4 |
 
 ### 6.2 API — BookStore
@@ -120,14 +122,14 @@ Priority: **P1** = blocks release, **P2** = major, **P3** = minor.
 |---|---|---|
 | UI-01 | Register form: field validation (empty fields highlighted), CAPTCHA required | P2 |
 | UI-02 | Login with valid credentials redirects to `/profile` and shows the username | P1 |
-| UI-03 | Login with invalid credentials shows "Invalid username or password!" | P1 |
-| UI-04 | Search filters the grid by title, author and publisher (case-insensitive), and an empty result shows "No rows found" | P2 |
+| UI-03 | Login with invalid credentials shows an inline error and stays on `/login` | P1 |
+| UI-04 | Search filters the grid by title, author and publisher (case-insensitive), and a term with no match shows an empty grid | P2 |
 | UI-05 | Book detail shows ISBN, title, author and publisher; "Add To Your Collection" raises the alert "Book added to your collection." | P1 |
-| UI-06 | Adding the same book twice raises the alert "Book already present in the your collection!" | P2 |
+| UI-06 | Adding the same book twice raises an alert saying the book is already in the collection (API code 1210), and no duplicate is created | P2 |
 | UI-07 | Profile lists the books in the collection, matching `GET /User/{id}` | P1 |
 | UI-08 | Delete icon → confirm modal → "OK" removes the row and raises the alert "Book deleted." | P1 |
 | UI-09 | "Cancel" on the delete modal keeps the book | P3 |
-| UI-10 | Logout clears auth cookies and returns to `/login`, and `/profile` then shows the not-logged-in message | P1 |
+| UI-10 | Logout clears auth cookies and returns to `/login`, and `/profile` no longer shows the user | P1 |
 | UI-11 | Session persists across reloads until the token `expires` | P3 |
 | UI-12 | Pagination and rows-per-page controls on the books grid | P3 |
 
@@ -142,11 +144,11 @@ Files: `postman/BookStore.postman_collection.json` and `postman/demoqa.postman_e
 
 ```
 BookStore API
-├── 00 Setup            → creates user A and user B (random names), stores ids and tokens in collection variables
-├── 01 Account          → ACC-01..10 (positive and negative)
-├── 02 BookStore        → BS-01..10 incl. IDOR check with user B
+├── 00 Setup            → ACC-01/05: creates user A and user B (random names), stores ids and tokens in collection variables
+├── 01 Account          → ACC-02..12, E25 (positive and negative)
+├── 02 BookStore        → BS-01..11 incl. IDOR check with user B
 ├── 03 E2E Flow         → register → token → search → add → list → delete → "logout" (token dropped → 401)
-└── 99 Teardown         → deletes both users and verifies they are gone
+└── 99 Teardown         → ACC-10: deletes every user created and verifies each is gone
 ```
 
 Design rules:
@@ -169,7 +171,8 @@ Design rules:
 | R4 | The API has **no logout endpoint**. JWTs stay valid until `expires`, which is 7 days. | API "logout" = discard the token client-side. Logged as a security gap: tokens should be revocable. |
 | R5 | `GenerateToken` returns **200** for invalid credentials | Tests assert on `status`/`token` and not only the HTTP code. Logged as a contract defect. |
 | R6 | `POST /Login` response includes the **plaintext password** | Logged as a security defect |
-| R7 | Malformed JSON returns an HTML **stack trace exposing server paths** (`/usr/projects/demosite-new/...`) | Logged as a security defect; Postman case asserts that no stack trace is returned, so it fails until this is fixed |
+| R7 | Malformed JSON returns an HTML **stack trace exposing server paths** (`/usr/projects/demosite-new/...`) | Logged as a security defect. The Postman check runs when `assertKnownDefects=true` and fails until the defect is fixed (same for R6) |
+| R8 | `GenerateToken` **revokes the user's previous token**. A test that mints its own token while a browser session is open silently logs the browser out. | Automation reuses the session token (the UI `token` cookie) for backend checks. Also covered by ACC-12. |
 
 ## 10. Reporting and CI
 - Newman writes `cli` and `junit` reports. Playwright writes HTML plus a trace on failure. Karate writes HTML reports to `api/target/karate-reports`.
